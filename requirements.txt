@@ -1,0 +1,16 @@
+# Tested against the versions in the trailing comments.
+numpy>=1.26          # 2.5.3
+torch>=2.2           # 2.14.0
+matplotlib>=3.8      # 3.11.1
+#
+# Device is picked automatically: CUDA > MPS > CPU (net.pick_device), and can be
+# forced with BADAPPLE_DEVICE=cpu|cuda|mps.
+#
+# On Linux the default PyPI torch wheel is already CUDA-enabled. For a specific
+# CUDA version, install torch first from the PyTorch index, e.g.
+#   pip install torch --index-url https://download.pytorch.org/whl/cu124
+# then  pip install -r requirements.txt
+#
+# ffmpeg and ffprobe must also be on PATH; they do all video decode/encode.
+#   macOS:  brew install ffmpeg
+#   debian: sudo apt install ffmpeg

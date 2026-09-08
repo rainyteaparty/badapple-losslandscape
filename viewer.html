@@ -1,0 +1,720 @@
+<meta charset="utf-8">
+<title>Bad Apple Loss Landscape</title>
+<style>
+  :root{ --bg:#08080c; --panel:#12121a; --line:#262633; --fg:#e8e8f0; --dim:#8a8aa0; --accent:#f0975a; }
+  body{ background:var(--bg); color:var(--fg); font:13px/1.5 ui-sans-serif,system-ui,sans-serif; overflow:hidden; margin:0; }
+  #cv{ position:fixed; inset:0; display:block; }
+  #ui{ position:fixed; top:0; left:0; right:0; background:color-mix(in srgb,var(--panel) 92%,transparent);
+       border-bottom:1px solid var(--line); padding:8px 14px 9px; backdrop-filter:blur(12px); z-index:5;
+       display:flex; flex-wrap:wrap; align-items:flex-end; gap:9px 16px; }
+  .brand{ margin-right:4px; }
+  .fgrp{ display:flex; flex-direction:column; gap:3px; }
+  .fgrp > label{ margin:0; white-space:nowrap; }
+  .fgrp select{ width:auto; min-width:118px; }
+  .fgrp input[type=range]{ width:110px; }
+  .chks{ display:flex; align-items:center; gap:12px; height:24px; }
+  .chks .chk{ margin-top:0; white-space:nowrap; }
+  .hint{ color:var(--dim); font-size:10px; flex-basis:100%; margin:-2px 0 0; }
+  /* #ui sets display:flex, an author rule, which overrides the UA stylesheet's
+     [hidden]{display:none} -- so the bottom-left toggle needs this to work. */
+  #ui[hidden]{ display:none; }
+  #seek{ width:230px; }
+  h1{ font-size:13px; margin:0 0 2px; letter-spacing:.02em; }
+  .sub{ color:var(--dim); font-size:11px; }
+  label{ display:block; color:var(--dim); font-size:11px; margin:10px 0 3px; }
+  select,input[type=range]{ width:100%; }
+  select{ background:#1c1c26; color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:5px; }
+  .row{ display:flex; gap:8px; align-items:center; }
+  button{ background:#1c1c26; color:var(--fg); border:1px solid var(--line); border-radius:6px;
+          padding:6px 11px; cursor:pointer; font-size:12px; }
+  button:hover{ border-color:var(--accent); }
+  .chk{ display:flex; align-items:center; gap:6px; color:var(--dim); font-size:11px; margin-top:7px; }
+  hr{ border:0; border-top:1px solid var(--line); margin:13px 0 4px; }
+  .grp{ color:var(--accent); font-size:10px; letter-spacing:.12em; text-transform:uppercase; margin:12px 0 2px; }
+  #t{ font-variant-numeric:tabular-nums; color:var(--dim); font-size:11px; }
+
+  /* preview strip, three rows bottom-up: top-down projections, side elevations,
+     contours. */
+  #panels{ position:fixed; bottom:12px; right:12px; z-index:5; display:flex; gap:8px; align-items:flex-end; }
+  #panels2{ position:fixed; bottom:180px; right:12px; z-index:5; display:flex; gap:8px; align-items:flex-end; }
+  #panels3{ position:fixed; bottom:306px; right:12px; z-index:5; display:flex; gap:8px; align-items:flex-end; }
+  .pan{ background:color-mix(in srgb,var(--panel) 90%,transparent); border:1px solid var(--line);
+        border-radius:8px; padding:6px; display:flex; flex-direction:column; gap:4px; }
+  .pan canvas{ display:block; border-radius:3px; background:#000; }
+  .pan span{ color:var(--dim); font-size:9.5px; letter-spacing:.09em; text-transform:uppercase; }
+  #err{ position:fixed; bottom:12px; left:12px; color:#ff8080; font-size:12px; z-index:6; }
+  /* invisible hit target: toggles the settings panel for clean video capture */
+  #hide{ position:fixed; left:0; bottom:0; width:40px; height:40px; z-index:9; }
+  @media (max-width:1100px){ #panels, #panels2, #panels3{ display:none; } }
+</style>
+
+<canvas id="cv"></canvas>
+<video id="hv" loop muted playsinline crossorigin="anonymous" style="display:none"></video>
+<video id="sv" loop muted playsinline crossorigin="anonymous" style="display:none"></video>
+<video id="lv" loop muted playsinline crossorigin="anonymous" style="display:none"></video>
+<audio id="au" loop></audio>
+<div id="err"></div>
+<div id="hide"></div>
+
+<div id="panels">
+  <div class="pan"><canvas id="p_src" width="168" height="126"></canvas><span>source</span></div>
+  <div class="pan"><canvas id="p_top" width="168" height="126"></canvas><span>landscape &middot; top-down</span></div>
+</div>
+<div id="panels2">
+  <div class="pan"><canvas id="p_sx" width="168" height="84"></canvas><span>side &middot; x</span></div>
+  <div class="pan"><canvas id="p_sy" width="168" height="84"></canvas><span>side &middot; y</span></div>
+</div>
+<div id="panels3">
+  <div class="pan"><canvas id="p_con" width="358" height="268"></canvas><span>contours &middot; top-down</span></div>
+</div>
+
+<div id="ui">
+  <div class="brand">
+    <h1>Bad Apple &mdash; Loss Landscape</h1>
+    <div class="sub">&#8214;&part;L/&part;a&#8214; over conv1, 112&times;84</div>
+  </div>
+
+  <div class="fgrp"><label>loss definition L</label>
+    <select id="loss">
+      <optgroup label="softmax-uncertainty (near-identical)">
+        <option value="entropy">entropy</option>
+        <option value="self_ce">self_ce</option>
+        <option value="fixed_ce">fixed_ce</option>
+        <option value="margin">margin</option>
+      </optgroup>
+      <optgroup label="max-logit">
+        <option value="neg_max_logit">neg_max_logit</option>
+      </optgroup>
+      <optgroup label="unnormalized magnitude">
+        <option value="free_energy">free_energy</option>
+        <option value="logit_l2">logit_l2</option>
+      </optgroup>
+    </select></div>
+
+  <div class="fgrp"><label>height scale <span id="zv">0.55</span></label>
+    <input id="z" type="range" min="0" max="1.6" step="0.01" value="0.55"></div>
+  <div class="fgrp"><label>contour density <span id="cv2">14</span></label>
+    <input id="c" type="range" min="0" max="40" step="1" value="14"></div>
+  <div class="fgrp"><label>surface opacity <span id="av">1.00</span></label>
+    <input id="a" type="range" min="0.08" max="1" step="0.01" value="1"></div>
+  <div class="fgrp"><label>layer spread <span id="spv">1.00</span></label>
+    <input id="sp" type="range" min="0" max="2.4" step="0.05" value="1.0"></div>
+
+  <div class="fgrp"><label>layers</label>
+    <div class="chks">
+      <div class="chk"><input type="checkbox" id="floor" checked><span>contour</span></div>
+      <div class="chk"><input type="checkbox" id="srcl" checked><span>source</span></div>
+      <div class="chk"><input type="checkbox" id="wire"><span>wireframe</span></div>
+    </div></div>
+
+  <div class="fgrp"><label>view</label>
+    <div class="chks">
+      <div class="chk"><input type="checkbox" id="spin" checked><span>auto-orbit</span></div>
+      <div class="chk"><input type="checkbox" id="lstack" checked><span>layer stack</span></div>
+      <div class="chk"><input type="checkbox" id="showpan" checked><span>panels</span></div>
+      <div class="chk"><input type="checkbox" id="peak" checked><span>side max</span></div>
+    </div></div>
+
+  <div class="fgrp"><label>frame rate cap</label>
+    <select id="fps">
+      <option value="30" selected>30 fps</option>
+      <option value="60">60 fps</option>
+      <option value="0">uncapped</option>
+    </select></div>
+
+  <div class="fgrp"><label>transport</label>
+    <div class="row">
+      <button id="play">&#9654; play</button>
+      <button id="snd">&#128263; audio</button>
+      <span id="t">0:00</span>
+    </div></div>
+
+  <div class="fgrp"><label>seek</label>
+    <input id="seek" type="range" min="0" max="1000" step="1" value="0"></div>
+
+  <div class="hint">drag orbit &middot; space+drag pan &middot; WASD move &middot; Q/E down/up &middot; shift fast &middot; scroll zoom &middot; 0 reset view &middot; CLICK BOTTOM LEFT TOGGLE THIS PANEL</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const GW = 112, GH = 84, PW = 4.0, PH = 3.0;
+const SRC = "video/out/";
+const $ = id => document.getElementById(id);
+
+const hv = $("hv"), sv = $("sv"), au = $("au"), lv = $("lv");
+hv.src = SRC + "heights_entropy.mp4";
+au.src = SRC + "audio.m4a";
+lv.src = SRC + "layers_atlas.mp4";
+fetch("source.txt").then(r => r.ok ? r.text() : "").then(t => {
+  if (t.trim()) sv.src = "video/" + encodeURIComponent(t.trim());
+}).catch(()=>{});
+
+const renderer = new THREE.WebGLRenderer({canvas:$("cv"), antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x08080c);
+const cam = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
+
+const tex = new THREE.VideoTexture(hv);
+tex.minFilter = THREE.LinearFilter; tex.magFilter = THREE.LinearFilter;
+tex.generateMipmaps = false;
+
+// Nearest, not linear: the atlas is a nearest upscale of each layer, so
+// filtering would blur neighbouring cells together and hide the downsampling
+// this stack exists to show.
+const layTex = new THREE.VideoTexture(lv);
+layTex.minFilter = THREE.NearestFilter; layTex.magFilter = THREE.NearestFilter;
+layTex.generateMipmaps = false;
+
+const srcTex = new THREE.VideoTexture(sv);
+srcTex.minFilter = THREE.LinearFilter; srcTex.magFilter = THREE.LinearFilter;
+srcTex.generateMipmaps = false;
+
+const U = {
+  hmap:{value:tex}, zScale:{value:0.55}, levels:{value:14.0},
+  res:{value:new THREE.Vector2(GW, GH)},
+  step:{value:new THREE.Vector2(PW/GW, PH/GH)},
+  lightDir:{value:new THREE.Vector3(0.5,0.7,0.85).normalize()},
+  alpha:{value:1.0},
+};
+
+// Vertex uv runs 0..1 across GW vertices, but texel centres sit at (i+0.5)/GW.
+// Without this remap every sample is off by half a texel and the surface shears.
+const SNAP = `vec2 snap(vec2 uv){ return (uv * (res - 1.0) + 0.5) / res; }`;
+const MAGMA = `
+vec3 magma(float t){
+  t = clamp(t, 0.0, 1.0);
+  vec3 c;
+  if(t<0.25)      c = mix(vec3(0.001,0.000,0.014), vec3(0.232,0.060,0.438), t/0.25);
+  else if(t<0.50) c = mix(vec3(0.232,0.060,0.438), vec3(0.551,0.161,0.506), (t-0.25)/0.25);
+  else if(t<0.75) c = mix(vec3(0.551,0.161,0.506), vec3(0.888,0.288,0.377), (t-0.50)/0.25);
+  else if(t<0.90) c = mix(vec3(0.888,0.288,0.377), vec3(0.988,0.646,0.398), (t-0.75)/0.15);
+  else            c = mix(vec3(0.988,0.646,0.398), vec3(0.987,0.991,0.750), (t-0.90)/0.10);
+  return c;
+}`;
+
+const surfMat = new THREE.ShaderMaterial({
+  uniforms: U, extensions:{derivatives:true},
+  transparent:true, side:THREE.DoubleSide,
+  vertexShader: `
+    uniform sampler2D hmap; uniform float zScale;
+    uniform vec2 res, step;
+    varying float vH; varying vec3 vN;
+    ${SNAP}
+    float h(vec2 uv){ return texture2D(hmap, snap(uv)).r; }
+    void main(){
+      vec2 t = vec2(1.0)/res;
+      float H = h(uv); vH = H;
+      // central differences -> analytic normal; far cheaper and smoother than
+      // recomputing geometry normals on the CPU every frame.
+      float dx = (h(uv+vec2(t.x,0.0)) - h(uv-vec2(t.x,0.0))) * zScale;
+      float dy = (h(uv+vec2(0.0,t.y)) - h(uv-vec2(0.0,t.y))) * zScale;
+      vN = normalize(vec3(-dx/(2.0*step.x), -dy/(2.0*step.y), 1.0));
+      vec3 p = position; p.z = H * zScale;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(p,1.0);
+    }`,
+  fragmentShader: `
+    uniform float levels; uniform vec3 lightDir; uniform float alpha;
+    varying float vH; varying vec3 vN;
+    ${MAGMA}
+    void main(){
+      vec3 base = magma(vH);
+      float lam = max(dot(normalize(vN), normalize(lightDir)), 0.0);
+      vec3 col = base * (0.42 + 0.72*lam);
+      col += vec3(0.30,0.22,0.35) * pow(1.0 - abs(normalize(vN).z), 3.0);  // rim
+      if(levels > 0.5){
+        float s = vH * levels, f = fract(s);
+        float w = fwidth(s) * 1.4;
+        float line = 1.0 - smoothstep(0.0, w, min(f, 1.0-f));
+        col = mix(col, col*0.35 + vec3(0.55,0.50,0.62)*0.55, line*0.55);
+      }
+      gl_FragColor = vec4(col, alpha);
+    }`
+});
+
+const geo = new THREE.PlaneGeometry(PW, PH, GW-1, GH-1);
+const surf = new THREE.Mesh(geo, surfMat);
+surf.renderOrder = 2;
+scene.add(surf);
+
+function setAlpha(a){
+  U.alpha.value = a;
+  surfMat.depthWrite = a > 0.985;
+  surfMat.needsUpdate = true;
+}
+
+const wireMat = new THREE.ShaderMaterial({
+  uniforms:U, wireframe:true, transparent:true,
+  vertexShader:`uniform sampler2D hmap; uniform float zScale; uniform vec2 res;
+    varying float vH; ${SNAP}
+    void main(){ float H = texture2D(hmap, snap(uv)).r; vH=H;
+      vec3 p = position; p.z = H*zScale;
+      gl_Position = projectionMatrix*modelViewMatrix*vec4(p,1.0); }`,
+  fragmentShader:`varying float vH; void main(){ gl_FragColor = vec4(vec3(0.85,0.85,1.0), 0.13); }`
+});
+const wire = new THREE.Mesh(geo, wireMat); wire.visible = false; scene.add(wire);
+
+// layer 2: contour projection -- the paper's signature 2D plot under the surface
+const floorMat = new THREE.ShaderMaterial({
+  uniforms:U, transparent:true, extensions:{derivatives:true},
+  vertexShader:`varying vec2 vUv; void main(){ vUv=uv;
+    gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+  fragmentShader:`
+    uniform sampler2D hmap; uniform float levels; uniform vec2 res;
+    varying vec2 vUv; ${SNAP} ${MAGMA}
+    void main(){
+      float H = texture2D(hmap, snap(vUv)).r;
+      float n = max(levels, 8.0);
+      float s = H*n, f = fract(s), w = fwidth(s)*1.4;
+      float line = 1.0 - smoothstep(0.0, w, min(f, 1.0-f));
+      gl_FragColor = vec4(magma(H), line*0.62 + 0.05);
+    }`
+});
+const flat = new THREE.PlaneGeometry(PW, PH, 1, 1);
+const floorMesh = new THREE.Mesh(flat, floorMat);
+floorMesh.renderOrder = 1;
+floorMat.depthWrite = false;
+scene.add(floorMesh);
+
+// layer 3: the source clip itself, below the contour projection
+const srcMesh = new THREE.Mesh(flat, new THREE.MeshBasicMaterial({
+  map:srcTex, transparent:true, opacity:0.92, depthWrite:false
+}));
+srcMesh.renderOrder = 0;
+scene.add(srcMesh);
+
+// --- the layer stack: conv2 -> conv3 -> pool -> fc1 -> prediction ----------
+// Every plate has the same footprint but its own native grid, so the cells grow
+// visibly coarser down the chain. That is the downsampling, made literal.
+const LAYERS = [
+  {name:"conv2",       gw:55,  gh:55},
+  {name:"conv3",       gw:27,  gh:27},
+  {name:"global pool", gw:3,   gh:3},
+  {name:"fc1",         gw:128, gh:1},
+  {name:"prediction",  gw:4,   gh:1},
+];
+// A plain horizontal row on +X, clear of the main plane's x range, so conv2 is
+// never hidden behind the surface whatever angle you orbit to.
+const NT = LAYERS.length, SW = 0.88, SH = 0.66, R0 = 2.95, GAP = 1.06;
+const layerGroup = new THREE.Group();
+scene.add(layerGroup);
+
+// One flat quad per cell, corners sharing the cell-centre uv. A PlaneGeometry
+// would interpolate height across each quad and the quantisation -- the whole
+// point of this stack -- would be invisible: the 3x3 pool rendered as a smooth
+// ramp instead of nine blocks.
+function cellGrid(w, h, gw, gh){
+  const pos = [], uvs = [], idx = [];
+  let v = 0;
+  for(let j = 0; j < gh; j++){
+    for(let i = 0; i < gw; i++){
+      const x0 = -w/2 + i*w/gw,     x1 = -w/2 + (i+1)*w/gw;
+      const y1 =  h/2 - j*h/gh,     y0 =  h/2 - (j+1)*h/gh;
+      const cu = (i+0.5)/gw, cv = 1.0 - (j+0.5)/gh;   // cell centre
+      pos.push(x0,y0,0, x1,y0,0, x1,y1,0, x0,y1,0);
+      uvs.push(cu,cv, cu,cv, cu,cv, cu,cv);
+      idx.push(v, v+1, v+2, v, v+2, v+3);
+      v += 4;
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+  g.setIndex(idx);
+  return g;
+}
+
+function makeLabel(text, color){
+  const c = document.createElement("canvas"); c.width = 256; c.height = 64;
+  const g = c.getContext("2d");
+  const t = new THREE.CanvasTexture(c); t.minFilter = THREE.LinearFilter;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({map:t, transparent:true, depthWrite:false}));
+  sp.scale.set(0.62, 0.155, 1);
+  sp.setText = txt => {                      // redraw in place; texture is reused
+    g.clearRect(0, 0, 256, 64);
+    g.font = "600 30px ui-monospace,Menlo,monospace"; g.textAlign = "center";
+    g.fillStyle = color || "#c8c8d8"; g.fillText(txt, 128, 42);
+    t.needsUpdate = true;
+  };
+  sp.setText(text);
+  return sp;
+}
+
+let angleLabel = null, lastAngle = -1;
+
+LAYERS.forEach((L, t) => {
+  const uni = {
+    atlas:{value:layTex}, res:{value:new THREE.Vector2(L.gw, L.gh)},
+    vOff:{value: 1.0 - (t+1)/NT}, vScl:{value: 1.0/NT},
+    zScale:U.zScale, zMul:{value:0.68},   // plates doubled, so double the relief too
+  };
+  const mat = new THREE.ShaderMaterial({
+    uniforms:uni,
+    vertexShader:`
+      uniform sampler2D atlas; uniform float vOff, vScl, zScale, zMul;
+      varying float vH;
+      void main(){
+        // uv is already the cell centre, identical on all four corners, so the
+        // quad stays flat and the cell reads as one value.
+        float H = texture2D(atlas, vec2(uv.x, vOff + uv.y*vScl)).r;
+        vH = H;
+        vec3 p = position; p.z = H*zScale*zMul;
+        gl_Position = projectionMatrix*modelViewMatrix*vec4(p,1.0);
+      }`,
+    fragmentShader:`varying float vH; ${MAGMA}
+      void main(){ gl_FragColor = vec4(magma(vH)*(0.55+0.45*vH), 1.0); }`
+  });
+  const m = new THREE.Mesh(cellGrid(SW, SH, L.gw, L.gh), mat);
+  const x = R0 + t*GAP;
+  m.position.set(x, 0, 0);
+  layerGroup.add(m);
+  const lab = makeLabel(L.name);
+  lab.position.set(x, -SH/2 - 0.17, 0);          // below the plate, sprite faces camera
+  layerGroup.add(lab);
+  if(t === NT-1){                                // the predicted rotation, in degrees
+    angleLabel = makeLabel("", "#f0975a");
+    angleLabel.position.set(x, -SH/2 - 0.34, 0);
+    layerGroup.add(angleLabel);
+  }
+});
+
+let spread = 1.0;
+function layout(){
+  floorMesh.position.z = -0.85 * spread;
+  srcMesh.position.z   = -1.70 * spread;
+}
+layout();
+
+// --- hand-rolled orbit (avoids a second CDN dependency) ---
+let az = -1.30, el = 0.78, dist = 10.2, drag = null, spin = true, space = false;
+const HOME = {az:-1.30, el:0.78, dist:10.2, t:[2.55,0,-0.35]};
+const target = new THREE.Vector3(...HOME.t);
+const bR = new THREE.Vector3(), bU = new THREE.Vector3(), bF = new THREE.Vector3();
+function place(){
+  cam.position.set(target.x + dist*Math.cos(el)*Math.cos(az),
+                   target.y + dist*Math.cos(el)*Math.sin(az),
+                   target.z + dist*Math.sin(el));
+  cam.up.set(0,0,1); cam.lookAt(target);
+}
+function stopOrbit(){                  // any manual camera input cancels auto-orbit
+  if(!spin) return;
+  spin = false; $("spin").checked = false;
+}
+function resetView(){
+  az = HOME.az; el = HOME.el; dist = HOME.dist; target.set(...HOME.t);
+}
+const UICHROME = "#ui,#panels,#panels2,#panels3,#hide";
+addEventListener("pointerdown", e => { if(!e.target.closest(UICHROME)) drag={x:e.clientX,y:e.clientY}; });
+addEventListener("pointerup", () => drag=null);
+addEventListener("pointermove", e => {
+  if(!drag) return;
+  if(!e.buttons){ drag = null; return; }          // released off-window
+  const dx = e.clientX-drag.x, dy = e.clientY-drag.y;
+  drag = {x:e.clientX, y:e.clientY};
+  if(!dx && !dy) return;
+  stopOrbit();
+  if(space){
+    // World units per screen pixel at the target plane, so the surface keeps
+    // pace with the cursor at any zoom level instead of crawling when zoomed out.
+    const wpp = 2*dist*Math.tan(cam.fov*Math.PI/360)/innerHeight;
+    cam.updateMatrixWorld();
+    cam.matrixWorld.extractBasis(bR, bU, bF);
+    target.addScaledVector(bR, -dx*wpp).addScaledVector(bU, dy*wpp);
+  } else {
+    az -= dx*0.006;
+    el  = Math.max(-0.6, Math.min(1.5, el + dy*0.005));
+  }
+});
+
+// --- WASD fly ---------------------------------------------------------------
+// Held keys are applied per-frame against dt rather than on keydown, so movement
+// is smooth and speed does not change with the frame-rate cap.
+const keys = new Set(), SPEED = 2.0;   // world units / second
+const NAV = new Set(["KeyW","KeyA","KeyS","KeyD","KeyQ","KeyE",
+                     "ShiftLeft","ShiftRight","Space","Digit0"]);
+function fly(dt){
+  if(!keys.size) return;
+  // Forward is flattened onto the ground plane: with the camera pitched down at
+  // the landscape, a true view-ray forward would just bury you in the surface.
+  const fx = -Math.cos(az), fy = -Math.sin(az);
+  let mx = 0, my = 0, mz = 0;
+  if(keys.has("KeyW")){ mx += fx; my += fy; }
+  if(keys.has("KeyS")){ mx -= fx; my -= fy; }
+  if(keys.has("KeyA")){ mx -= fy; my += fx; }
+  if(keys.has("KeyD")){ mx += fy; my -= fx; }
+  if(keys.has("KeyE"))  mz += 1;
+  if(keys.has("KeyQ"))  mz -= 1;
+  if(!mx && !my && !mz) return;
+  const n = Math.hypot(mx, my, mz);               // diagonals must not move faster
+  const s = SPEED * (keys.has("ShiftLeft")||keys.has("ShiftRight") ? 3 : 1) * dt/1000 / n;
+  target.set(target.x + mx*s, target.y + my*s, target.z + mz*s);
+  stopOrbit();
+}
+addEventListener("keydown", e => {
+  if(e.metaKey || e.ctrlKey || e.altKey) return;  // leave browser shortcuts alone
+  if(!NAV.has(e.code)) return;
+  // Space would otherwise toggle the focused checkbox or scroll the page, and
+  // WASD would type-ahead into the focused <select>.
+  e.preventDefault();
+  if(e.repeat) return;
+  if(e.code === "Digit0"){ resetView(); return; }
+  if(e.code === "Space"){ space = true; document.body.style.cursor = "grab"; }
+  keys.add(e.code);
+});
+addEventListener("keyup", e => {
+  if(!NAV.has(e.code)) return;
+  keys.delete(e.code);
+  if(e.code === "Space"){ space = false; document.body.style.cursor = ""; }
+});
+// A key released after cmd-tab sends its keyup to the other app, which would
+// otherwise leave the camera drifting forever.
+addEventListener("blur", () => {
+  keys.clear(); space = false; drag = null; document.body.style.cursor = "";
+});
+addEventListener("wheel", e => { if(!e.target.closest(UICHROME)) dist = Math.max(2.4, Math.min(16, dist + e.deltaY*0.004)); }, {passive:true});
+
+function resize(){
+  const w=innerWidth, h=innerHeight;
+  renderer.setSize(w,h); cam.aspect=w/h; cam.updateProjectionMatrix();
+}
+addEventListener("resize", resize); resize();
+
+// ---------------------------------------------------------------------------
+// Preview panels. The heightmap is only 112x84, so reading it back on the CPU
+// each frame costs ~9.4k texels -- cheap enough to drive four 2D projections
+// without a second WebGL context.
+// ---------------------------------------------------------------------------
+const readCv = document.createElement("canvas"); readCv.width = GW; readCv.height = GH;
+const readCtx = readCv.getContext("2d", {willReadFrequently:true});
+const offCv = document.createElement("canvas"); offCv.width = GW; offCv.height = GH;
+const offCtx = offCv.getContext("2d");
+const offImg = offCtx.createImageData(GW, GH);
+const hs = new Float32Array(GW*GH);
+const colX = new Float32Array(GW), colY = new Float32Array(GH);
+
+const STOPS = [[0,0,4],[59,15,112],[140,41,129],[227,74,96],[252,165,101],[252,253,191]];
+function magma(t, out){
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  const u = t*(STOPS.length-1), i = Math.min(STOPS.length-2, u|0), k = u-i;
+  const a = STOPS[i], b = STOPS[i+1];
+  out[0]=a[0]+(b[0]-a[0])*k; out[1]=a[1]+(b[1]-a[1])*k; out[2]=a[2]+(b[2]-a[2])*k;
+  return out;
+}
+const _c = [0,0,0];
+const magmaCss = t => { magma(t,_c); return `rgb(${_c[0]|0},${_c[1]|0},${_c[2]|0})`; };
+
+// The prediction tile is the last of NT bands in the atlas, 4 values across.
+const predCan = document.createElement("canvas");
+predCan.width = 128; predCan.height = 1;
+const predCtx = predCan.getContext("2d", {willReadFrequently:true});
+
+function readPrediction(){
+  if(lv.readyState < 2) return null;
+  const TH = lv.videoHeight / NT;                    // one tile's height
+  predCtx.drawImage(lv, 0, TH*(NT-1), lv.videoWidth, TH, 0, 0, 128, 1);
+  const d = predCtx.getImageData(0, 0, 128, 1).data;
+  const p = [16, 48, 80, 112].map(x => d[x*4] / 255); // centre of each 32px band
+  const tot = p.reduce((a,b) => a+b, 0);
+  if(tot < 1e-6) return null;
+  for(let i=0; i<4; i++) p[i] /= tot;                 // h264 is lossy; renormalise
+  // Angles are circular, so a plain weighted mean is wrong: 0.5 at 0 deg and 0.5
+  // at 270 deg would average to 135 deg, pointing the opposite way. Take the
+  // circular mean instead -- sum the unit vectors, then atan2.
+  const cx = p[0] - p[2], cy = p[1] - p[3];
+  let deg = Math.atan2(cy, cx) * 180 / Math.PI;
+  if(deg < 0) deg += 360;
+  return {p, arg: p.indexOf(Math.max(...p)) * 90,
+          deg, R: Math.hypot(cx, cy)};
+}
+
+function sampleHeights(){
+  if(hv.readyState < 2) return false;
+  readCtx.drawImage(hv, 0, 0, GW, GH);
+  const d = readCtx.getImageData(0, 0, GW, GH).data;
+  colX.fill(0); colY.fill(0);
+  const useMax = $("peak").checked;
+  if(!useMax){ colX.fill(0); colY.fill(0); }
+  for(let y=0; y<GH; y++) for(let x=0; x<GW; x++){
+    const i = y*GW+x, v = d[i*4]/255;
+    hs[i] = v;
+    if(useMax){ if(v>colX[x]) colX[x]=v; if(v>colY[y]) colY[y]=v; }
+    else { colX[x]+=v/GH; colY[y]+=v/GW; }
+  }
+  return true;
+}
+
+function blit(ctx){
+  offCtx.putImageData(offImg, 0, 0);
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(offCv, 0, 0, ctx.canvas.width, ctx.canvas.height);
+}
+
+// top-down shaded relief: the landscape seen from directly above
+function drawTop(ctx){
+  const d = offImg.data, c = [0,0,0];
+  const kx = 2.6, ky = 2.0, lx = 0.42, ly = 0.55, lz = 0.72;
+  for(let y=0; y<GH; y++) for(let x=0; x<GW; x++){
+    const i = y*GW+x;
+    const xm = x>0?i-1:i, xp = x<GW-1?i+1:i, ym = y>0?i-GW:i, yp = y<GH-1?i+GW:i;
+    const dx = (hs[xp]-hs[xm])*kx, dy = (hs[yp]-hs[ym])*ky;
+    const inv = 1/Math.hypot(dx, dy, 1);
+    const lam = Math.max(0, (-dx*lx - dy*ly + lz) * inv);
+    magma(hs[i], c);
+    const s = 0.40 + 0.78*lam, o = i*4;
+    d[o]=Math.min(255,c[0]*s); d[o+1]=Math.min(255,c[1]*s); d[o+2]=Math.min(255,c[2]*s); d[o+3]=255;
+  }
+  blit(ctx);
+}
+
+// Top-down contour projection.
+//
+// The first attempt rendered contours into the 112x84 grid buffer and upscaled,
+// so every line was smeared by the resampling. This resolves the field at panel
+// resolution first, then derives line width per output pixel -- the CPU
+// equivalent of the shader's fwidth(), which is what makes the GPU version
+// clean. Interpolation is smoothstep-weighted bilinear: plain bilinear is only
+// C0, and the slope discontinuity at each cell boundary puts a visible kink in
+// every contour line.
+let cfield = null, cimg = null, cw = 0, ch = 0;
+
+function smoothSample(u, v){
+  const x0 = u|0, y0 = v|0;
+  const x1 = x0 < GW-1 ? x0+1 : x0, y1 = y0 < GH-1 ? y0+1 : y0;
+  const fx = u-x0, fy = v-y0;
+  const sx = fx*fx*(3-2*fx), sy = fy*fy*(3-2*fy);
+  const a = hs[y0*GW+x0], b = hs[y0*GW+x1], c = hs[y1*GW+x0], d = hs[y1*GW+x1];
+  const top = a + (b-a)*sx, bot = c + (d-c)*sx;
+  return top + (bot-top)*sy;
+}
+
+function drawContour(ctx){
+  const CW = ctx.canvas.width, CH = ctx.canvas.height;
+  if(CW !== cw || CH !== ch){                 // canvas resized: rebuild buffers
+    cw = CW; ch = CH;
+    cfield = new Float32Array(CW*CH);
+    cimg = ctx.createImageData(CW, CH);
+  }
+  const n = Math.max(U.levels.value, 8);
+  const su = (GW-1)/(CW-1), sv = (GH-1)/(CH-1);
+  for(let y=0; y<CH; y++){
+    const v = y*sv;
+    for(let x=0; x<CW; x++) cfield[y*CW+x] = smoothSample(x*su, v);
+  }
+  const d = cimg.data, col = [0,0,0];
+  for(let y=0; y<CH; y++){
+    const ym = y>0 ? y-1 : y, yp = y<CH-1 ? y+1 : y;
+    for(let x=0; x<CW; x++){
+      const i = y*CW+x, h = cfield[i];
+      const xm = x>0 ? x-1 : x, xp = x<CW-1 ? x+1 : x;
+      // per-output-pixel derivative of the contour phase == fwidth(s)
+      const gx = (cfield[y*CW+xp] - cfield[y*CW+xm]) * 0.5 * n;
+      const gy = (cfield[yp*CW+x] - cfield[ym*CW+x]) * 0.5 * n;
+      const w = (Math.abs(gx) + Math.abs(gy)) * 1.4 + 1e-4;
+      const f = h*n - Math.floor(h*n);
+      let t = Math.min(f, 1-f) / w; if(t > 1) t = 1;
+      const line = 1 - t*t*(3-2*t);                 // smoothstep, matching the shader
+      magma(h, col);
+      const a = line*0.62 + 0.05, o = i*4;
+      d[o]   = col[0]*a + 8*(1-a);
+      d[o+1] = col[1]*a + 8*(1-a);
+      d[o+2] = col[2]*a + 12*(1-a);
+      d[o+3] = 255;
+    }
+  }
+  ctx.putImageData(cimg, 0, 0);
+}
+
+// orthographic side elevation: max (or mean) height collapsed along one axis
+function drawSide(ctx, vals, n){
+  const W = ctx.canvas.width, H = ctx.canvas.height;
+  ctx.fillStyle = "#08080c"; ctx.fillRect(0,0,W,H);
+  const bw = W/n;
+  for(let i=0; i<n; i++){
+    const v = vals[i], bh = Math.max(1, v*(H-6));
+    ctx.fillStyle = magmaCss(v);
+    ctx.fillRect(i*bw, H-bh, Math.max(1, bw-0.35), bh);
+  }
+  ctx.fillStyle = "rgba(232,232,240,.16)"; ctx.fillRect(0, H-1, W, 1);
+}
+
+const pSrc = $("p_src").getContext("2d");
+const pTop = $("p_top").getContext("2d");
+const pCon = $("p_con").getContext("2d");
+const pSx  = $("p_sx").getContext("2d");
+const pSy  = $("p_sy").getContext("2d");
+
+// --- UI ---
+$("loss").onchange = e => {
+  const t = hv.currentTime, playing = !hv.paused;
+  hv.src = SRC + "heights_" + e.target.value + ".mp4";
+  hv.addEventListener("loadeddata", () => { hv.currentTime = t; if(playing) hv.play(); }, {once:true});
+};
+$("z").oninput = e => { U.zScale.value = +e.target.value; $("zv").textContent = e.target.value; };
+$("c").oninput = e => { U.levels.value = +e.target.value; $("cv2").textContent = e.target.value; };
+$("sp").oninput = e => { spread = +e.target.value; $("spv").textContent = (+e.target.value).toFixed(2); layout(); };
+$("a").oninput = e => { setAlpha(+e.target.value); $("av").textContent = (+e.target.value).toFixed(2); };
+$("lstack").onchange = e => layerGroup.visible = e.target.checked;
+$("fps").onchange = e => fpsCap = +e.target.value;
+$("hide").onclick = () => $("ui").hidden = !$("ui").hidden;
+$("wire").onchange = e => wire.visible = e.target.checked;
+$("floor").onchange = e => floorMesh.visible = e.target.checked;
+$("srcl").onchange = e => srcMesh.visible = e.target.checked;
+$("spin").onchange = e => spin = e.target.checked;
+$("showpan").onchange = e => {
+  const v = e.target.checked ? "" : "none";
+  $("panels").style.display = v; $("panels2").style.display = v;
+  $("panels3").style.display = v;
+};
+
+$("play").onclick = () => {
+  if(hv.paused){ hv.play(); sv.play().catch(()=>{}); lv.play().catch(()=>{}); if(!au.muted) au.play().catch(()=>{}); $("play").innerHTML="&#9208; pause"; }
+  else { hv.pause(); sv.pause(); lv.pause(); au.pause(); $("play").innerHTML="&#9654; play"; }
+};
+$("snd").onclick = () => {
+  au.muted = !au.muted;
+  $("snd").innerHTML = au.muted ? "&#128263; audio" : "&#128266; audio";
+  if(!au.muted && !hv.paused){ au.currentTime = hv.currentTime; au.play().catch(()=>{}); } else au.pause();
+};
+let seeking = false;
+$("seek").oninput = e => { seeking = true; if(hv.duration) hv.currentTime = hv.duration * e.target.value/1000; };
+$("seek").onchange = () => seeking = false;
+
+const fmt = s => `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,"0")}`;
+
+// The heightmap video is 30fps, so rendering faster only re-renders identical
+// height data and re-uploads both video textures for nothing. This is the
+// single biggest lever on GPU cost here.
+let fpsCap = 30, prev = 0;
+function tick(now){
+  requestAnimationFrame(tick);
+  now = now || 0;
+  if(fpsCap && now - prev < 1000/fpsCap - 1) return;
+  const dt = Math.min(now - prev, 100);   // clamp so a tab switch cannot jump the camera
+  prev = now;
+  // orbit is per-second, not per-frame, so the cap does not change orbit speed
+  fly(dt);
+  if(spin && !drag) az += 0.096 * dt/1000;
+  place();
+  // keep audio + source clip slaved to the heightmap video
+  for(const m of [sv, au, lv]){
+    if(m.readyState > 1 && hv.readyState > 1 && Math.abs(m.currentTime - hv.currentTime) > 0.18)
+      m.currentTime = hv.currentTime;
+  }
+  if(angleLabel){
+    const pr = readPrediction();
+    if(pr && pr.arg !== lastAngle){ lastAngle = pr.arg; angleLabel.setText(pr.arg + "\u00b0"); }
+  }
+  if(hv.duration && !seeking) $("seek").value = 1000*hv.currentTime/hv.duration;
+  $("t").textContent = fmt(hv.currentTime||0);
+
+  if($("showpan").checked && sampleHeights()){
+    drawTop(pTop); drawContour(pCon);
+    drawSide(pSx, colX, GW); drawSide(pSy, colY, GH);
+    if(sv.readyState > 1) pSrc.drawImage(sv, 0, 0, pSrc.canvas.width, pSrc.canvas.height);
+  }
+  renderer.render(scene, cam);
+}
+hv.addEventListener("error", () => $("err").textContent =
+  "could not load " + hv.src + " — serve over http, not file://");
+tick();
+</script>

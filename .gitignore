@@ -1,0 +1,7 @@
+video/
+figures.py
+
+# python
+__pycache__/
+*.pyc
+.venv/
