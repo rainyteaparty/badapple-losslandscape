@@ -17,9 +17,7 @@ For frame `x`, let `a = conv1(x)` be the first hidden layer, pre-ReLU.
 
 The **height** at grid point `(i,j)` is the loss response to a localized perturbation of `a` there:
 
-```
-z(i,j) = L(head(a + ε·e_ij)) − L(head(a))    ≈    ε · ‖ ∂L/∂a[:,i,j] ‖
-```
+![tex 1](docs/tex_1.png)
 
 where `e_ij` perturbs all channels at spatial position `(i,j)`. The gradient form is the small-ε limit and costs **one backward pass per batch** instead of H×W forward passes, which is 9,408 times cheaper per frame.
 
@@ -37,10 +35,8 @@ def _channel_scales(a, eps=1e-8):
 
 The final surface blends two terms:
 
-```
-z = w1 · norm(‖∂L/∂a‖)  +  w2 · norm(mean_c relu(a))
-      └─ loss term ─┘         └─ activation term ─┘
-```
+![tex 2](docs/tex_2.png)
+
 
 `w1` supplies ReLU-gated edges and ridges; `w2` supplies the silhouette. See **Section 6** to see what this implies.
 
