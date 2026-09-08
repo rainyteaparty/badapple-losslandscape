@@ -1,0 +1,3 @@
+# Batch files break if git rewrites them to LF; shell scripts break the reverse way.
+*.bat text eol=crlf
+*.sh  text eol=lf
