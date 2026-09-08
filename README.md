@@ -295,7 +295,7 @@ The training existed solely for the purpose of "giving direction" to the first h
 ## 8. Installation/Running it
 
 ```bash
-./setup.sh                 
+./setup.sh                         # .bat for windows                
 source .venv/bin/activate
 
 python generate.py --loss all      # train, then clip -> heightmaps    (~3 min)
