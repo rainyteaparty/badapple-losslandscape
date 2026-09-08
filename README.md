@@ -52,7 +52,7 @@ z = w1 · norm(‖∂L/∂a‖)  +  w2 · norm(mean_c relu(a))
 
 
 
-The architecture is based on AlexNet, a simple Deep CNN classification model.
+The architecture is based on AlexNet, a simple CNN classification model.
 ![pooling comparison](docs/fig_arch.svg)
 
 
@@ -209,11 +209,11 @@ BUT, how much training do we have to do?
 
 ![steps](docs/fig_steps.png)
 
-As you can see, the validation acc seems to flatten out very early on, so what exactly is the point of further training?
-
-Short answer: I don't know but it looks better when rendered.
+As you can see, the validation acc seems to flatten out very early on, but we keep training to optimize other stats, such as the correlation with the actual frame and separation between b/w regions.
 
 We also do not want `corr_frame` to be close to 1, as that just means the output resembling a binary slab. See **section 5**.
+
+These stats are further tuned with `w2`.
 
 ---
 
