@@ -6,11 +6,20 @@ matplotlib>=3.8      # 3.11.1
 # Device is picked automatically: CUDA > MPS > CPU (net.pick_device), and can be
 # forced with BADAPPLE_DEVICE=cpu|cuda|mps.
 #
-# On Linux the default PyPI torch wheel is already CUDA-enabled. For a specific
-# CUDA version, install torch first from the PyTorch index, e.g.
-#   pip install torch --index-url https://download.pytorch.org/whl/cu124
-# then  pip install -r requirements.txt
+# TORCH + CUDA differs by platform:
+#   Linux    the default PyPI wheel is already CUDA-enabled.
+#   Windows  the default PyPI wheel is CPU-ONLY. For GPU training install torch
+#            first from the PyTorch index, then this file:
+#              pip install torch --index-url https://download.pytorch.org/whl/cu124
+#              pip install -r requirements.txt
+#            setup.bat does this automatically when nvidia-smi is present.
+#   macOS    MPS, nothing extra to install.
+#
+# Windows note: build the venv from a python.org Python, not from a conda base
+# env -- conda's Intel OpenMP collides with torch's and import fails with
+# WinError 1114. Also needs the VC++ 2015-2022 x64 redistributable.
 #
 # ffmpeg and ffprobe must also be on PATH; they do all video decode/encode.
 #   macOS:  brew install ffmpeg
 #   debian: sudo apt install ffmpeg
+#   windows: winget install Gyan.FFmpeg
