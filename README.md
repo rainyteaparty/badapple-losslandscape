@@ -1,6 +1,6 @@
 # Bad Apple Loss Landscape
 
-Every frame of *Bad Apple!!* rendered as a loss landscape over the **first hidden layer** of a small (5-layer) convolutional network, inspired by Welch Lab's videos on AlexNet and their really really nice visualizations.
+Every frame of *Bad Apple!!* rendered as a loss landscape over the **first hidden layer** of a small (5-layer) convolutional network, inspired by [Welch Lab's](https://www.youtube.com/@WelchLabs) videos on [AlexNet](https://youtu.be/UZDiGooFs54), [ResNet](https://youtu.be/QgH9sr7G13Q) and their really really nice visualizations.
 
 ![3D surfaces](docs/preview_3d.png)
 
