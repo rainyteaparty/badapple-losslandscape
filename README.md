@@ -5,7 +5,9 @@ Every frame of *Bad Apple!!* rendered as a loss landscape over the **first hidde
 ![3D surfaces](docs/preview_3d.png)
 
 Source frame -> same frame as a loss surface under 3 categories of loss definitions: **entropy**, **neg_max_logit** and **logit_l2** 
-## 1. placeholder
+## 1. placeholder (demo)
+
+![3D surfaces](docs/fig_flan.gif)
 
 wip
 
