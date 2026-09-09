@@ -38,7 +38,9 @@ The final surface blends two terms:
 ![tex 2](docs/tex_2.png)
 
 
-`w1` supplies ReLU-gated edges and ridges; `w2` supplies the silhouette. See **Section 6** to see what this implies.
+`w1` supplies ReLU-gated edges and ridges; `w2` supplies the silhouette. 
+
+See **Section 5** to see what this implies.
 
 ## 3. Architecture
 
@@ -175,7 +177,7 @@ Per-frame min-max renormalizes to the frame's own extremes, so the terrain pump 
 
 ## 5. The w1/w2 tradeoff
 
-This is the one aesthetic (subjective) parameter, and it's basically a tug of war between the two things this project aims for: aesthetics and coherence (boring binary slab and incoherent mess).
+This is the one aesthetic (subjective) parameter, and it's basically a tug of war between the two things this project aims for: actual gradients, and coherence (boring binary slab and incoherent mess).
 
 | w2 | corr_frame (global) ↑ | reading |
 |---|---|---|
@@ -187,12 +189,11 @@ This is the one aesthetic (subjective) parameter, and it's basically a tug of wa
 
 ![w2 sweep](docs/fig_w2.png)
 
-
+Sadly, rendering just the loss itself will be incoherent, so we supply the silhouette using the activation of the first hidden layer. This results in a landscape where the silhouette is still visible, while also effectively visualizing loss.
 
 
 ## 5 and a half. Training (part 2)
 
-BUT, how much training do we have to do?
 
 | steps | train acc | validation acc | corr_frame | separation | relief |
 |---|---|---|---|---|---|
@@ -288,7 +289,7 @@ they are literally the surface's silhouette seen from each axis.
 
 ## 7.99999999999 Conclusion
 
-Well, what we ended up with is an entirely conceptual model, trained to predict the rotation angle of Bad Apple frames. All of which are standing completely straight. So in conclusion, this model is entirely functionally useless, but the point of this project was to generate Bad Apple on a Loss Landscape, which I think this it succeeded in doing. 
+Well, what we ended up with is an entirely conceptual model, trained to predict the rotation angle of Bad Apple frames. All of which are standing completely straight. So in conclusion, this model is entirely functionally useless, but the point of this project was to visualize Bad Apple on a Loss Landscape, which I think this it succeeded in doing. 
 
 The training existed solely for the purpose of "giving direction" to the first hidden layer, and a rotation classification task does surprisingly well at this. I initially had the idea of having the classification be somewhat meaningful by training the model to classify characters, but clustering ended up not giving sufficient direction to the layers at all (in the sense that the loss landscapes do not look like "Bad Apple"). Maybe in the future! However, I'm happy with this.
 
